@@ -8,10 +8,14 @@ run: all
 	$(TARGET)
 
 all: main.o
-	gcc -o $(TARGET) $(OUTPUT_DIR)/$<
+	gcc -s -o $(TARGET) $(OUTPUT_DIR)/$<
+
+debug: main.o
+	gcc -g -o $(TARGET) $(OUTPUT_DIR)/$<
+	gdb $(TARGET)
 
 main.o: main.s
-	as -o $(OUTPUT_DIR)/$@ $<
+	as -g -o $(OUTPUT_DIR)/$@ $<
 
 .PHONY: clean
 clean:
