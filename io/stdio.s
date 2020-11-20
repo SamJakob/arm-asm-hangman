@@ -1,18 +1,11 @@
-/**
-    stdio.s - a part of Hangman by Sam Jakob Mearns.
-    
+/*
     Hangman - by Sam Jakob Mearns
     Unpublished Work (c) 2020 Sam Jakob Mearns - All Rights Reserved
-
-    **
-
-    Depends on:
-    - utils.s
  */
 
-// Syscall Listings:
-// https://chromium.googlesource.com/chromiumos/docs/+/master/constants/syscalls.md#arm-32_bit_EABI
-
+// C-style include guard to ensure file is only included once.
+.ifndef libSJM_stdio_inc
+.set libSJM_stdio_inc, 1
 
 //// @PRIVATE                   *** not expected to be used externally.
 .bss
@@ -21,22 +14,28 @@ _stdio_flushInput_buf:        .space 1
 .text
 .macro _stdio_read data, dataSize
     PUSH {R0, R1, R2, R7}
-    MOV R7, #3          // system call: read from
-    MOV R0, #1          // read from:   standard input
+    MOV R0, #0          // read from:   standard input
     LDR R1, =\data      // arg1 (%r1):  char* buf
     LDR R2, =\dataSize  // arg2 (%r2):  size_t count
-    SYSCALL
+    SYSCALL $sys_read
     POP {R0, R1, R2, R7}
 .endm
 
-.macro _stdio_flushInput
-    _stdio_flushInput_start\@:
-    _stdio_read _stdio_flushInput_buf, #1
-    ifMemCharEqual _stdio_flushInput_buf, #0x0A, _stdio_flushInput_complete\@
-    B _stdio_flushInput_start\@
+/**
+ * A function to flush the input buffer by reading characters until a newline is reached.
+ * This is used if the user enters more characters than expected, to ensure that the standard
+ * input stream is clear for the next time a call is made.
+ */
+_stdio_flushInput:
+    PROLOGUE
 
-    _stdio_flushInput_complete\@:
-.endm
+    _stdio_flushInput_start:
+        _stdio_read _stdio_flushInput_buf, #1
+        ifMemCharEqual _stdio_flushInput_buf, 0x0A, _stdio_flushInput_complete
+        B _stdio_flushInput_start
+    _stdio_flushInput_complete:
+
+    EPILOGUE
 
 //// @PUBLIC                    *** the public API that this file exposes.
 
@@ -49,11 +48,10 @@ _stdio_flushInput_buf:        .space 1
  */
 .macro print str, strSize
     PUSH {R0, R1, R2, R7}
-    MOV R7, #4          // system call: write to
-    MOV R0, #0          // write to:    standard output
+    MOV R0, #1          // write to:    standard output
     LDR R1, =\str       // arg1 (%r1):  const char* buf
     LDR R2, =\strSize   // arg2 (%r2):  size_t count
-    SYSCALL
+    SYSCALL $sys_write
     POP {R0, R1, R2, R7}
 .endm
 
@@ -64,11 +62,10 @@ _stdio_flushInput_buf:        .space 1
  */
 .macro printErr str, strSize
     PUSH {R0, R1, R2, R7}
-    MOV R7, #4          // system call: write to
     MOV R0, #2          // write to:    standard error
     LDR R1, =\str       // arg1 (%r1):  const char* buf
     LDR R2, =\strSize   // arg2 (%r2):  size_t count
-    SYSCALL
+    SYSCALL $sys_write
     POP {R0, R1, R2, R7}
 .endm
 
@@ -96,7 +93,9 @@ _stdio_flushInput_buf:        .space 1
     BEQ inputFlushed\@
 
     // Now flush standard input.
-    _stdio_flushInput
+    BL _stdio_flushInput
 
     inputFlushed\@:
 .endm
+
+.endif

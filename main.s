@@ -2,229 +2,351 @@
     Hangman - by Sam Jakob Mearns
     Unpublished Work (c) 2020 Sam Jakob Mearns - All Rights Reserved
  */
- .text
-.include "utils.s"
-.include "stdio.s"
-.include "random.s"
 
+.text
+.include "function/function.s"
+.include "function/syscall.s"
+
+.include "io/utils.s"
+.include "io/stdio.s"
+.include "io/file.s"
+
+.include "math/random.s"
+
+.include "utils.s"
 .include "hangman.s"
 
+.extern sprintf
 .extern malloc
 .extern free
 
 .text
 .global main
 main:
+    /* SETUP */
+
     // Initialize registers.
     MOV R0, #0
-
-    // Stat the word list so we can obtain the file size.
-    MOV R7, #106    // system call:     stat
-    LDR R0, =wordListFileName
-    LDR R1, =wordListFileStat
-    SYSCALL
-
-    // Extract the word list file size from the struct and, if it's valid,
-    // save it into wordListFileSize.
-    LDR R1, [R1, #20]       // size is a word (long), so load the next word at position 20 relative to the start of the stat struct.
-    MOV R0, #134217728
-    
-    CMP R1, R0
-    BGT end_ERR_WLSZ_MAX    // prevent the file from exceeding 128 MiB
-    
-    MOV R0, #0
-    CMP R1, R0
-    BEQ end_ERR_WLSZ_EMPT   // however, ensure the file is not missing or empty.
-
-    LDR R0, =wordListFileSize
-    STR R1, [R0]
-
-    // Call malloc to allocate memory for the word list.
-    LDR R0, [R0]            // Load the size of the file (from the memory address R0 is pointing to, which will be wordListFileSize)
-    BL malloc               // Call malloc to allocate memory for that file.
-    LDR R6, =wordListFileBase
-    STR R0, [R6]
-    MOV R6, R0              // Copy the address of the allocated memory to R6.
-
-    // Call open to get a file descriptor for the words file.
-    MOV R7, #5              // system call: open
-    LDR R0, =wordListFileName
     MOV R1, #0
     MOV R2, #0
-    SYSCALL
-    MOV R5, R0              // Copy the file descriptor to R5.
+    MOV R3, #0
 
-    // Read the file into the allocated memory.
-    MOV R7, #3              // system call: read
-    MOV R0, R5
-    MOV R1, R6
-    LDR R2, =wordListFileSize
-    LDR R2, [R2]
-    SYSCALL
+    // Print loading message.
+    print loading_str, loading_str_size
 
-    // Now count the number of words in the file.
-    //                      // R2 = size of file (from before).
-    MOV R3, #0              // R3 = offset
-    MOV R4, #0              // R4 = word counter
+    // Seed the random number generator.
+    seedRNG
 
-    wordCounter_start:
-    CMP R3, R2
-    BGE wordCounter_end
+    initialize:
+        // 1. Determine the size of the word file.
+            // Stat the word list so we can obtain the file size.
+            LDR R0, =wordListFileName
+            BL getFileSize
 
-    LDRB R1, [R3, R6]
-    CMP R1, #0x0A
-    BEQ wordCounter_addWord
-    B wordCounter_afterAddWord
+            // Extract the word list file size from the struct and, if it's valid,
+            // save it into wordListFileSize.
+            
+                // -> Ensure the file does not exceed 128 MiB.
+                MOV R1, #134217728
+                CMP R0, R1
+                BGT end_ERR_WLSZ_MAX
+            
+                // -> Ensure the file is not missing or empty.
+                MOV R1, #0
+                CMP R0, R1
+                BEQ end_ERR_WLSZ_EMPT
 
-    wordCounter_addWord:
-    ADD R4, R4, #1
-    
-    wordCounter_afterAddWord:
-    ADD R3, R3, #1
-    B wordCounter_start
-    wordCounter_end:
+            // Now, save R0 in wordListFileSize for later use.
+            LDR R1, =wordListFileSize
+            STR R0, [R1]
 
-    // We now have the number of words entered into words.txt in R4.
-    // It's time to select a random number.
-    randomNumber #10
-    // Our random number is now stored in R0.
+        // 2. Load the word list into memory.
+            // Call malloc to allocate memory for the word list.
+            // (required size of memory block is in R0)
+            BL malloc               // Call malloc to allocate memory for that file.
+            LDR R6, =wordListFileBase
+            STR R0, [R6]
+            MOV R6, R0              // Copy the address of the allocated memory to R6.
 
-    // NOTE: R5, R6 still off limits
-    // R0 still contains the random word.
+            // Call open to get a file descriptor for the words file.
+            LDR R0, =wordListFileName
+            MOV R1, #0
+            MOV R2, #0
+            SYSCALL $sys_open
+            MOV R5, R0              // Copy the file descriptor to R5.
 
-    // Select the word and determine its length.
-    LDR R2, =wordListFileSize
-    LDR R2, [R2]
-    MOV R3, #0              // R3 = offset
-    MOV R4, #0
-    LDR R6, =wordListFileBase
-    LDR R6, [R6]
-    MOV R8, #0              // R8 = start of word
-    MOV R9, #0              // R9 = end of word
+            // Read the file into the allocated memory.
+            // R0                           = file descriptor
+            MOV R1, R6                  //  = memory address
+            LDR R2, =wordListFileSize
+            LDR R2, [R2]                //  = amount of bytes to read.
+            SYSCALL $sys_read
 
-    wordCounter2_start:
-    CMP R4, R0
-    BNE wordCounter2_noSetStart
-    ADD R3, R3, #1
-    MOV R8, R3
-    ADD R8, R6, R8
-    wordCounter2_noSetStart:
+        // 3. Count the number of words in the file.
+            LDR R0, =wordListFileBase
+            LDR R0, [R0]
+            MOV R1, R2
+            BL countWords
+        
+        // 4. Save the number of words in the word list.
+            LDR R1, =wordListCount
+            STR R0, [R1]
+        
+        // 5. Clean up.
+            // We're done with the file on disk, so we can close the file descriptor.
+            // The file in memory is retained for the next word selection.
+            MOV R0, R5
+            SYSCALL $sys_close
 
-    CMP R3, R2
-    BGT end_ERR_OVERFLOW
+    /* GAME */
+    game:
+        // Reload the app state. (R6)
+        LDR R6, =appState
+        LDR R6, [R6]
 
-    LDRB R1, [R3, R6]
-    CMP R1, #0x0A
-    BEQ wordCounter2_addWord
-    B wordCounter2_afterAddWord
+        // Reset number of remaining moves. (R5)
+        BL resetInitGallows
+        MOV R5, #6
 
-    wordCounter2_addWord:
-    CMP R4, R0
-    BNE wordCounter2_noSetEnd
-    MOV R9, R3
-    ADD R9, R6, R9
-    B wordCounter2_end
-    wordCounter2_noSetEnd:
-    ADD R4, R4, #1
-    
-    wordCounter2_afterAddWord:
-    ADD R3, R3, #1
-    B wordCounter2_start
-    wordCounter2_end:
+        // Select the word to use.
+        LDR R7, =randomWordBase
+        LDR R8, =randomWordSize
+        BL selectRandomWord
+        STR R0, [R7]
+        STR R1, [R8]
 
-    // Allocate memory for the new word and save the size.
+        // Check the 'welcome message shown' bit in the app state...
+        AND R1, R6, #1
+        CMP R1, #1
+        BEQ game_ready      // If it's equal to 1, skip the welcome message.
 
-    
+        game_showWelcomeMessage:
+            // Show the welcome message.
+            print welcome_str, welcome_str_size
 
-    // Now that we've selected and copied our word, we can free the
-    // file descriptor and the allocated memory for the file.
-    MOV R7, #6              // system call: close
-    MOV R0, R5
-    SYSCALL
+            // Set the welcome message shown bit to 1.
+            ORR R6, R6, #1
+            LDR R0, =appState
+            STR R6, [R0]
 
-    MOV R0, R6
-    BL free                 // free the memory
+        game_ready:
 
-    // Print the welcome message.
-    print           welcome_str, welcome_str_size
+            // Start the user's turn loop.
+            game_turn:
+                print ansi_SAVE, ansi_SAVE_size
 
-    // Read the user's next guess.
-    print           prompt_str, prompt_str_size
-    readGuess       guess
+                // Check whether the user has moves left or if they've won the game.
+                // Additionally print the gallows, misses and word.
+                game_checkShowState:
+                    // Print the game state underlay.
+                    MOV R0, R5                  // number of moves left
+                    LDR R1, =randomWordBase     // selected word base address
+                    LDR R1, [R1]
+                    LDR R2, =randomWordSize     
+                    LDR R2, [R2]                // selected word size
+                    LDR R3, =guessedLetters     // guessed letters
+                    BL printUnderlay
 
-    ifMemCharEqual  memChar=guess, char=#0x30, jmpIfEqual=end
+                    // Now restore and print the gallows. (the first parameter is the number of moves left)
+                    print ansi_RESTORE, ansi_RESTORE_size
+                    MOV R0, R5
+                    BL printGallows
 
-    print           guess, #1
+                    print ansi_CLEARLN, ansi_CLEARLN_size
+
+                    CMP R5, #0
+                    BEQ game_end_loss
+
+                // Read the user's next guess.
+                print           prompt_str, prompt_str_size
+                BL readGuess
+
+                // Check if the user guessed 0.
+                // If so, we end the game.
+                print ansi_RESTORE, ansi_RESTORE_size
+                ifMemCharEqual memChar=guess, char=#0x30, jmpIfEqual=end
+
+                // Otherwise we'll update the game start accordingly.
+                SUB R5, R5, #1
+
+                B game_turn
+            
+            // The end of the game.
+            // R0 - endgame status (#0=fail, #1=success)
+            game_end:
+                CMP R0, #0
+                BNE game_end_success
+
+                game_end_loss:
+                    print loss_str, loss_str_size
+                    B play_again_prompt
+
+                game_end_success:
+                    print win_str, win_str_size
+                    B play_again_prompt
+                
+            play_again_prompt:
+                print           play_again_str, play_again_str_size
+                
+                // Check if the user wants to play again.
+                BL readGuess
+                ifMemCharEqual memChar=guess, char=#89, jmpIfEqual=restartGame
+
+                // If not, simply end.
+                print ansi_RESTORE, ansi_RESTORE_size
+                print newlines, #3
 
 end:
+    // Free the memory for our file.
+    LDR R0, =wordListFileBase
+    LDR R0, [R0]
+    BL free
+
+    // Print thank you message
+    print thanks_for_playing_str, thanks_for_playing_str_size
+
     // Set exit code to 0 (normal exit.)
-    MOV R7, #1  // system call:     set exit code
     MOV R0, #0  // exit code:       0
-    SYSCALL
-    JMP =.end
+    SYSCALL $sys_exit
 
 end_ERR_WLSZ_EMPT:
     printErr        wordListMissingEmpty_str, wordListMissingEmpty_str_size
 
     // Set exit code to 1 (error: ERR_WLSZ_EMPT - word list size empty or missing)
-    MOV R7, #1  // system call:     set exit code
     MOV R0, #1  // exit code:       1
-    SYSCALL
-    JMP =.end
+    SYSCALL $sys_exit
 
 end_ERR_WLSZ_MAX:
     printErr        wordListSizeExceedMax_str, wordListSizeExceedMax_str_size
 
     // Set exit code to 2 (error: ERR_WLSZ_MAX - word list size exceed max)
-    MOV R7, #1  // system call:     set exit code
     MOV R0, #2  // exit code:       2
-    SYSCALL
-    JMP =.end
+    SYSCALL $sys_exit
+
+restartGame:
+    print ansi_RESTORE, ansi_RESTORE_size
+    print ansi_CLEAR, ansi_CLEAR_size
+    B game
 
 end_ERR_OVERFLOW:
+    // Free the memory for the words list (but only if it's loaded).
+    LDR R0, =wordListFileBase
+    LDR R0, [R0]
+    CMP R0, #0
+    BLEQ free
+
     printErr        overflowError_str, overflowError_str_size
 
     // Set exit code to 3 (error: ERR_OVERFLOW - overflow or safety error)
-    MOV R7, #1  // system call:     set exit code
     MOV R0, #3  // exit code:       3
-    SYSCALL
-    JMP =.end
+    SYSCALL $sys_exit
 
 .bss
+.align 4
 // A single byte reserved for the user's guess.
 guess:                          .space 1
+// An array of the user's already guessed letters.
+guessedLetters:                 .space 26
 
+.align 4
 // Space in memory reserved for the size and address
 // of the random word.
 randomWordSize:                 .word 0
-randomWordAddr:                 .word 0
+randomWordBase:                 .word 0
 
 .data
+.align 4
+// State
+/*
+    appState: [00000000_00000000_00000000_0000000, 0]
+                                                   ^
+                                                   |- Whether or not the welcome message has been displayed.
+*/
+appState:                      .word 0
+
 // Files
-wordListFileName:               .string "words.txt"
-wordListFileStat:               .space 64 // the size of a linux assembly stat is 64 bits (/arch/arm/include/uapi/asm/stat.h).
+wordListFileName:               .string "dictionary.txt"
+.align 4
 wordListFileSize:               .word 0
-wordListFileBase:               .word 0 // base of the loaded file in memory.
+wordListFileBase:               .word 0 // memory address of the base of the loaded words list.
+wordListCount:                  .word 0 // the number of words in the words list.
 
 // Strings
-welcome_str:                    .string "Welcome to Hangman!\nDeveloped by Sam Jakob Mearns\n\nFollow the on-screen prompts to play the game or type 0 at any of the prompts to exit the game.\nGood luck!\n\n"
-welcome_str_end:                .set welcome_str_size, welcome_str_end - welcome_str
+newlines:                        .string "\n\n\n\n\n\n\n\n\n\n"
 
-prompt_str:                     .string "Enter next character (A-Z) or 0 (zero) to exit: "
-prompt_str_end:                 .set prompt_str_size, prompt_str_end - prompt_str
+loading_str:                    .string "Loading...\r"
+loading_str_size=               .-loading_str
+
+welcome_str:
+.ascii "\033[2J                                                  \n"
+.ascii "                                                  \n"
+.ascii "     /\\  /\\__ _ _ __   __ _ _ __ ___   __ _ _ __  \n"
+.ascii "    / /_/ / _` | '_ \\ / _` | '_ ` _ \\ / _` | '_ \\ \n"
+.ascii "   / __  / (_| | | | | (_| | | | | | | (_| | | | |\n"
+.ascii "   \\/ /_/ \\__,_|_| |_|\\__, |_| |_| |_|\\__,_|_| |_|\n"
+.ascii "                      |___/                       \n"
+.ascii "\n"
+.ascii "▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\n"
+.ascii "\n"
+.ascii "Welcome to Hangman!\n"
+.ascii "Developed by Sam Jakob Mearns\n"
+.ascii "\n"
+.ascii "• Follow the on-screen prompts to play the game or type 0 (zero)\n"
+.ascii "  at any of the prompts to exit the game.\n"
+.ascii "\n"
+.ascii "• Good luck!\n"
+.ascii "\n"
+.ascii "▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\n"
+.asciz "\n"
+welcome_str_size=               .-welcome_str
+
+prompt_str:                     .string "Enter next character (A-Z) or 0 (zero) to exit ⇾ "
+prompt_str_size=                .-prompt_str
+
+loss_str:                       .string "You lost :(\nYou ran out of moves!"
+loss_str_size=                  .-loss_str
+
+win_str:                        .string "You win! :)\nCongratulations!"
+win_str_size=                   .-win_str
+
+play_again_str:                 .string "\n\nWould you like to play again? (y/N) ⇾ "
+play_again_str_size=            .-play_again_str
+
+thanks_for_playing_str:
+.ascii "\n\n\n\n\n\n\n\n\n\n\n"
+.ascii "▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\n"
+.ascii "\n"
+.ascii "Hangman\n"
+.ascii "Developed by Sam Jakob Mearns\n"
+.ascii "\n"
+.asciz "\nThank you for playing :)\n"
+thanks_for_playing_str_size=    .-thanks_for_playing_str
+
+// ANSI Commands
+ansi_SAVE:                      .string "\033[s"    // ANSI command to save cursor pos.
+ansi_SAVE_size=                 .-ansi_SAVE
+
+ansi_RESTORE:                   .string "\033[u"    // ANSI command to restore cursor pos.
+ansi_RESTORE_size=              .-ansi_RESTORE
+
+ansi_CLEARLN:                   .string "\033[K"  // ANSI command to clear current line.
+ansi_CLEARLN_size=              .-ansi_CLEARLN
+
+ansi_CLEAR:                     .string "\033[2J"  // ANSI command to clear current line.
+ansi_CLEAR_size=                .-ansi_CLEAR
 
 // Errors
-wordListSizeExceedMax_str:      .string "(!) ERROR: The word list is too big. It may not exceed 128 MiB.\n"
-wordListSizeExceedMax_str_end:  .set wordListSizeExceedMax_str_size, wordListSizeExceedMax_str_end - wordListSizeExceedMax_str
+wordListSizeExceedMax_str:      .string "\033[1;31m\033[1m(!) ERROR: The word list file (dictionary.txt) is too big. It may not exceed 128 MiB.\033[0m\n"
+wordListSizeExceedMax_str_size= .-wordListSizeExceedMax_str
 
-wordListMissingEmpty_str:       .string "(!) ERROR: The word list file is missing or empty. Please create words.txt and add some words.\n"
-wordListMissingEmpty_str_end:   .set wordListMissingEmpty_str_size, wordListMissingEmpty_str_end - wordListMissingEmpty_str
+wordListMissingEmpty_str:       .string "\033[1;31m\033[1m(!) ERROR: The words list file (dictionary.txt) is missing or empty. Please create words.txt and add some words.\033[0m\n"
+wordListMissingEmpty_str_size=  .-wordListMissingEmpty_str
 
-overflowError_str:              .string "(!) ERROR: A problem occurred in the program which forced it to exit.\n"
-overflowError_str_end:          .set overflowError_str_size, overflowError_str_end - overflowError_str
+overflowError_str:              .string "\033[1;31m\033[1m(!) ERROR: A problem occurred in the program which forced it to exit.\033[0m\n"
+overflowError_str_size=         .-overflowError_str
 
 // Debug
 debug_str:                      .string "Hello world!\n"
-debug_str_end:                  .set debug_str_size, debug_str_end - debug_str
+debug_str_size=                 .-debug_str
 
 .end

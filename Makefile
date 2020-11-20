@@ -19,5 +19,5 @@ main.o: main.s
 
 .PHONY: clean
 clean:
-	-rm $(OUTPUT_DIR)
+	-rm -r $(OUTPUT_DIR)
 	mkdir $(OUTPUT_DIR)
