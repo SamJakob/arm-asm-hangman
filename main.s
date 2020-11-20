@@ -108,6 +108,23 @@ main:
         BL resetInitGallows
         MOV R5, #6
 
+        // Zero-out the guess.
+        MOV R7, #0
+        LDR R8, =guess
+        STRB R7, [R8]
+
+        // Zero-out the guessedLetters.
+        LDR R8, =guess
+        MOV R9, #0
+        game_clearGuessedLetters_loop:
+            CMP R9, #26
+            BGE game_clearGuessedLetters_loopEnd
+
+            STRB R7, [R8, R9]
+            ADD R9, R9, #1
+            B game_clearGuessedLetters_loop
+        game_clearGuessedLetters_loopEnd:
+
         // Select the word to use.
         LDR R7, =randomWordBase
         LDR R8, =randomWordSize
@@ -152,8 +169,10 @@ main:
                     MOV R0, R5
                     BL printGallows
 
+                    // Clear the last line to reset the prompt.
                     print ansi_CLEARLN, ansi_CLEARLN_size
 
+                    // Check if the player has lost the game.
                     CMP R5, #0
                     BEQ game_end_loss
 
@@ -166,10 +185,24 @@ main:
                 print ansi_RESTORE, ansi_RESTORE_size
                 ifMemCharEqual memChar=guess, char=#0x30, jmpIfEqual=end
 
-                // Otherwise we'll update the game start accordingly.
+                // Load the guess into R7.
+                LDR R7, =guess
+                LDR R7, [R7]
+
+                // If the guess is out of range, don't bother processing it.
+                CMP R7, #65
+                BLT game_skipProcessGuess
+                CMP R7, #90
+                BGT game_skipProcessGuess
+
+                // Otherwise, we'll start processing the guess:
+                    // -> first, check if it was already guessed.
+
                 SUB R5, R5, #1
 
-                B game_turn
+                game_skipProcessGuess:
+                    // Otherwise we'll continue.
+                    B game_turn
             
             // The end of the game.
             // R0 - endgame status (#0=fail, #1=success)
@@ -178,10 +211,30 @@ main:
                 BNE game_end_success
 
                 game_end_loss:
+                    print word_reveal_str, word_reveal_str_size
+                    MOV R0, #1
+                    LDR R1, =randomWordBase
+                    LDR R1, [R1]
+                    LDR R2, =randomWordSize
+                    LDR R2, [R2]
+                    SYSCALL $sys_write
+
+                    print newlines, #2
+
                     print loss_str, loss_str_size
                     B play_again_prompt
 
                 game_end_success:
+                    print word_reveal_str, word_reveal_str_size
+                    MOV R0, #1
+                    LDR R1, =randomWordBase
+                    LDR R1, [R1]
+                    LDR R2, =randomWordSize
+                    LDR R2, [R2]
+                    SYSCALL $sys_write
+
+                    print newlines, #2
+
                     print win_str, win_str_size
                     B play_again_prompt
                 
@@ -303,6 +356,9 @@ welcome_str_size=               .-welcome_str
 prompt_str:                     .string "Enter next character (A-Z) or 0 (zero) to exit ⇾ "
 prompt_str_size=                .-prompt_str
 
+word_reveal_str:                .string "\nThe answer was: "
+word_reveal_str_size=           .-word_reveal_str
+
 loss_str:                       .string "You lost :(\nYou ran out of moves!"
 loss_str_size=                  .-loss_str
 
@@ -313,7 +369,7 @@ play_again_str:                 .string "\n\nWould you like to play again? (y/N)
 play_again_str_size=            .-play_again_str
 
 thanks_for_playing_str:
-.ascii "\n\n\n\n\n\n\n\n\n\n\n"
+.ascii "\n\n\n\n\n\n\n\n\n\n\n\n\n"
 .ascii "▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\n"
 .ascii "\n"
 .ascii "Hangman\n"

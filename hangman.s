@@ -298,6 +298,17 @@ printUnderlay:
 
     EPILOGUE
 
+/**
+ * Steps through the guessedLetters array until it reaches a null byte,
+ * and adds the guess at that point.
+ */
+addGuess:
+    PROLOGUE
+    // R4 = guess char
+
+
+    EPILOGUE
+
 .data
 .align 4
 gallows_str:
