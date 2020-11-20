@@ -293,10 +293,55 @@ printUnderlay:
     print underlay_2_1, underlay_2_1_size
 
     // TODO: print misses
+    MOV R0, #1
+    LDR R1, =guessedLetters
+    MOV R2, #26
+    SYSCALL $sys_write
 
     print underlay_3, underlay_3_size
 
     EPILOGUE
+
+/**
+ * Steps through the guessedLetters array to look for the provided character;
+ * if it is found, returns 1, otherwise returns 0.
+ */
+alreadyGuessed:
+    PROLOGUE
+    // R4 = guess char
+
+    MOV R5, #0  // = current offset
+    LDR R6, =guessedLetters
+
+    alreadyGuessed_loopStart:
+        // If the current offset is 26 or higher (recall that the array is zero-indexed)
+        // we have passed the array and not found the character.
+        CMP R5, #26
+        BGE alreadyGuessed_false
+
+        LDRB R7, [R6, R5] // R7 = character at: [guessedLetters base address + offset]
+        
+        // If the loaded character is equal to the input, we know the result
+        // has been found.
+        CMP R7, R4
+        BEQ alreadyGuessed_true
+
+        // Otherwise, if the loaded character is a null byte, we know we've reached the end
+        // of the populated characters in our array and the character was not found, hence
+        // the character was not already guessed.
+        CMP R7, #0
+        BEQ alreadyGuessed_false
+
+        ADD R5, R5, #1
+        B alreadyGuessed_loopStart
+
+    alreadyGuessed_false:
+        MOV R0, #0
+        EPILOGUE
+    
+    alreadyGuessed_true:
+        MOV R0, #1
+        EPILOGUE
 
 /**
  * Steps through the guessedLetters array until it reaches a null byte,
@@ -306,6 +351,22 @@ addGuess:
     PROLOGUE
     // R4 = guess char
 
+    MOV R5, #0  // = current offset
+    LDR R6, =guessedLetters
+
+    addGuess_loopStart:
+        // Look for the next null byte.
+        // If it's found, exit the loop.
+        LDRB R7, [R6, R5] // R7 = character at: [guessedLetters base address + offset]
+        CMP R7, #0
+        BEQ addGuess_loopEnd
+
+        // Otherwise, keep looking.
+        ADD R5, R5, #1
+        B addGuess_loopStart
+    addGuess_loopEnd:
+
+    STRB R4, [R6, R5] // Store our character at: [base + offset]
 
     EPILOGUE
 

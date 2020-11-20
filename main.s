@@ -163,7 +163,7 @@ main:
                     LDR R2, [R2]                // selected word size
                     LDR R3, =guessedLetters     // guessed letters
                     BL printUnderlay
-
+                    
                     // Now restore and print the gallows. (the first parameter is the number of moves left)
                     print ansi_RESTORE, ansi_RESTORE_size
                     MOV R0, R5
@@ -195,10 +195,26 @@ main:
                 CMP R7, #90
                 BGT game_skipProcessGuess
 
-                // Otherwise, we'll start processing the guess:
-                    // -> first, check if it was already guessed.
+                // If the character was already guessed, don't bother processing it.
+                MOV R0, R7
+                BL alreadyGuessed
+                CMP R0, #1
+                BNE game_startProcessingGuess
 
-                SUB R5, R5, #1
+                print newlines, #8
+                print alreadyGuessed_str, alreadyGuessed_str_size
+                print ansi_RESTORE, ansi_RESTORE_size
+                B game_skipProcessGuess
+
+                game_startProcessingGuess:
+                    // Otherwise, we'll start processing the guess:
+                    print newlines, #8
+                    print ansi_CLEARLN, ansi_CLEARLN_size
+                    print ansi_RESTORE, ansi_RESTORE_size
+
+                    MOV R0, R7
+                    BL addGuess
+                    SUB R5, R5, #1
 
                 game_skipProcessGuess:
                     // Otherwise we'll continue.
@@ -298,6 +314,8 @@ end_ERR_OVERFLOW:
 .align 4
 // A single byte reserved for the user's guess.
 guess:                          .space 1
+
+.align 4
 // An array of the user's already guessed letters.
 guessedLetters:                 .space 26
 
@@ -359,10 +377,10 @@ prompt_str_size=                .-prompt_str
 word_reveal_str:                .string "\nThe answer was: "
 word_reveal_str_size=           .-word_reveal_str
 
-loss_str:                       .string "You lost :(\nYou ran out of moves!"
+loss_str:                       .string "\033[1;31m\033[1mYou lost :(\033[0m\n\033[1;31mYou ran out of moves!\033[0m"
 loss_str_size=                  .-loss_str
 
-win_str:                        .string "You win! :)\nCongratulations!"
+win_str:                        .string "\033[1;92mYou win! :)\n\033[1;92mCongratulations!\033[0m"
 win_str_size=                   .-win_str
 
 play_again_str:                 .string "\n\nWould you like to play again? (y/N) ⇾ "
@@ -392,6 +410,9 @@ ansi_CLEAR:                     .string "\033[2J"  // ANSI command to clear curr
 ansi_CLEAR_size=                .-ansi_CLEAR
 
 // Errors
+alreadyGuessed_str:             .string "\033[1;31m\033[1m(!) You already guessed that letter!\033[0m"
+alreadyGuessed_str_size=        .-alreadyGuessed_str
+
 wordListSizeExceedMax_str:      .string "\033[1;31m\033[1m(!) ERROR: The word list file (dictionary.txt) is too big. It may not exceed 128 MiB.\033[0m\n"
 wordListSizeExceedMax_str_size= .-wordListSizeExceedMax_str
 
