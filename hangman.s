@@ -268,19 +268,8 @@ printUnderlay:
 
     print underlay_1_1, underlay_1_1_size
 
-    // TODO: print word
-    MOV R3, #0
-    LDR R8, =underlay_blank
-
-    printUnderlay_wordLoopStart:
-        CMP R3, R6
-        BGE printUnderlay_wordLoopEnd
-        
-        print underlay_blank, #2
-        ADD R3, R3, #1
-
-        B printUnderlay_wordLoopStart
-    printUnderlay_wordLoopEnd:
+    // Print word
+    BL printWord
 
     print underlay_2, underlay_2_size
 
@@ -293,13 +282,47 @@ printUnderlay:
     print underlay_2_1, underlay_2_1_size
 
     // TODO: print misses
-    MOV R0, #1
-    LDR R1, =guessedLetters
-    MOV R2, #26
-    SYSCALL $sys_write
+    //MOV R0, $stdout
+    //LDR R1, =guessedLetters
+    //MOV R2, #26
+    //SYSCALL $sys_write
+    BL printMisses
 
     print underlay_3, underlay_3_size
 
+    EPILOGUE
+
+/**
+ * Steps through the word to check if the supplied character exists in the word.
+ * If it does, returns 1, otherwise returns 0.
+ */
+charInWord:
+    PROLOGUE
+    // R4 = char to test
+    // R5 = base address of word
+    LDR R5, =randomWordBase
+    LDR R5, [R5]
+    // R6 = size of word
+    LDR R6, =randomWordSize
+    LDR R6, [R6]
+
+    MOV R7, #0  // = current offset
+    MOV R8, #0  // = return value
+
+    charInWord_loopStart:
+        CMP R7, R6
+        BGE charInWord_loopEnd
+
+        LDRB R9, [R5, R7]
+        CMP R9, R4
+        MOVEQ R8, #1
+        BEQ charInWord_loopEnd
+
+        ADD R7, R7, #1
+        B charInWord_loopStart
+    charInWord_loopEnd:
+    
+    MOV R0, R8
     EPILOGUE
 
 /**
@@ -310,6 +333,7 @@ alreadyGuessed:
     PROLOGUE
     // R4 = guess char
 
+    MOV R0, #0  // = return value
     MOV R5, #0  // = current offset
     LDR R6, =guessedLetters
 
@@ -317,30 +341,26 @@ alreadyGuessed:
         // If the current offset is 26 or higher (recall that the array is zero-indexed)
         // we have passed the array and not found the character.
         CMP R5, #26
-        BGE alreadyGuessed_false
+        BGT alreadyGuessed_return
 
         LDRB R7, [R6, R5] // R7 = character at: [guessedLetters base address + offset]
         
         // If the loaded character is equal to the input, we know the result
         // has been found.
         CMP R7, R4
-        BEQ alreadyGuessed_true
+        MOVEQ R0, #1
+        BEQ alreadyGuessed_return
 
         // Otherwise, if the loaded character is a null byte, we know we've reached the end
         // of the populated characters in our array and the character was not found, hence
         // the character was not already guessed.
         CMP R7, #0
-        BEQ alreadyGuessed_false
+        BEQ alreadyGuessed_return
 
         ADD R5, R5, #1
         B alreadyGuessed_loopStart
-
-    alreadyGuessed_false:
-        MOV R0, #0
-        EPILOGUE
     
-    alreadyGuessed_true:
-        MOV R0, #1
+    alreadyGuessed_return:
         EPILOGUE
 
 /**
@@ -370,6 +390,85 @@ addGuess:
 
     EPILOGUE
 
+printWord:
+    PROLOGUE
+    LDR R6, =randomWordBase
+    LDR R6, [R6]
+    LDR R7, =randomWordSize
+    LDR R7, [R7]
+    MOV R8, #0  // = current offset
+
+    printWord_loopStart:
+        CMP R8, R7
+        BGT printWord_loopEnd
+
+        LDRB R0, [R6, R8]
+        BL alreadyGuessed
+
+        // If the character is in the word, this will branch to isGuessedChar
+        // which will print the character.
+        CMP R0, #1
+        BEQ printWord_isGuessedChar
+
+        // Otherwise print that character.
+        CMP R8, R7
+        BGE printWord_loopEnd
+        print underlay_blank, #2
+        B printWord_continue
+
+        printWord_isGuessedChar:
+            // Write the guessed character and a space into
+            // guessedCharStr.
+            LDR R0, =guessedCharStr
+            LDRB R1, [R6, R8]
+            STRB R1, [R0]
+            MOV R1, #0x20
+            STRB R1, [R0, #1]
+
+            MOV R0, $stdout
+            LDR R1, =guessedCharStr
+            MOV R2, #2
+            SYSCALL $sys_write
+            B printWord_continue
+        
+        printWord_continue:
+            ADD R8, R8, #1
+            B printWord_loopStart
+
+    printWord_loopEnd:
+    EPILOGUE
+
+printMisses:
+    PROLOGUE
+
+    MOV R4, #0  // = counter
+    LDR R5, =guessedLetters
+    
+    printMisses_loopStart:
+        CMP R4, #26
+        BGT printMisses_loopEnd
+
+        LDRB R0, [R5, R4]
+        BL charInWord
+        CMP R0, #1
+        BEQ printMisses_continue
+
+        LDRB R0, [R5, R4]
+        LDR R1, =guessedCharStr
+        STRB R0, [R1]
+
+        MOV R0, $stdout
+        LDR R1, =guessedCharStr
+        MOV R2, #1
+        SYSCALL $sys_write
+
+        printMisses_continue:
+            ADD R4, R4, #1
+
+    printMisses_loopEnd:
+
+    EPILOGUE
+
 .data
 .align 4
 gallows_str:
@@ -395,7 +494,7 @@ underlay_1:
 underlay_1_size= .-underlay_1
 
 underlay_1_1:
-.asciz "): "
+.asciz " letters): "
 underlay_1_1_size= .-underlay_1_1
 
 underlay_2:
@@ -418,6 +517,7 @@ underlay_3_size = .-underlay_3
 
 intFormat: .string "%d"
 
+guessedCharStr: .space 2
 wordCountStr: .space 10
 missesCountStr: .space 10
 

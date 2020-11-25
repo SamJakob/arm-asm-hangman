@@ -214,7 +214,11 @@ main:
 
                     MOV R0, R7
                     BL addGuess
-                    SUB R5, R5, #1
+
+                    MOV R0, R7
+                    BL charInWord
+                    CMP R0, #0
+                    SUBEQ R5, R5, #1
 
                 game_skipProcessGuess:
                     // Otherwise we'll continue.

@@ -7,6 +7,7 @@
 .ifndef libSJM_syscall_inc
 .set libSJM_syscall_inc, 1
 
+/* System Calls */
 // Using values from: https://chromium.googlesource.com/chromiumos/docs/+/master/constants/syscalls.md#arm-32_bit_EABI
 .set sys_exit, 1
 .set sys_read, 3

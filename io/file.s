@@ -7,6 +7,11 @@
 .ifndef libSJM_fileio_inc
 .set libSJM_fileio_inc, 1
 
+/* POSIX File Descriptors */
+.set stdin, 0
+.set stdout, 1
+.set stderr, 2
+
 .text
 getFileSize:
     PROLOGUE
