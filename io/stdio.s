@@ -39,6 +39,11 @@ _stdio_flushInput:
 
 //// @PUBLIC                    *** the public API that this file exposes.
 
+/* POSIX File Descriptors */
+.set stdin, 0
+.set stdout, 1
+.set stderr, 2
+
 /**
  * Prints (strSize) bytes from memory starting at (str) to standard output
  * using the Linux write syscall.
