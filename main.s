@@ -16,7 +16,6 @@
 .include "utils.s"
 .include "hangman.s"
 
-.extern sprintf
 .extern malloc
 .extern free
 

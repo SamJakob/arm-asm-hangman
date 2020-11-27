@@ -6,6 +6,8 @@
 .include "io/utils.s"
 .include "io/stdio.s"
 
+.extern sprintf
+
 /**
  * Counts the number of words in the file.
  *
@@ -48,22 +50,30 @@ countWords:
 selectRandomWord:
     PROLOGUE
 
-    // Select a random word.
+    // Select a random word by picking a random number from 0 to
+    // wordListCount.
     LDR R0, =wordListCount
     LDR R0, [R0]
-
     randomNumber R0
-    MOV R9, R0
 
-    // Get the base address (R0) and size (R1) of the word.
+    // Get the base address (R0) and size (R1) of the word list
+    // and pass it to locateWord.
+    // R0 = random number from above.
     LDR R1, =wordListFileBase
     LDR R1, [R1]
     LDR R2, =wordListFileSize
     LDR R2, [R2]
     BL locateWord
 
+    // R0 = word base address
+    // R1 = word size
     EPILOGUE
 
+/**
+ * Iterates through the file buffer in memory until it reaches the word
+ * indicated by the word index. The word is thus identified by its base
+ * address and size, returned in R0 and R1 respectively.
+ */
 locateWord:
     PROLOGUE
     // R4 = word index
@@ -134,6 +144,8 @@ locateWord:
         // the word's size.
         SUB R1, R1, R0
 
+    // R0 = word base address
+    // R1 = word size
     EPILOGUE
 
 /**
