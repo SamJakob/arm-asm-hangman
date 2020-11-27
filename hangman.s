@@ -387,31 +387,29 @@ addGuess:
     addGuess_loopEnd:
 
     STRB R4, [R6, R5] // Store our character at: [base + offset]
-
     EPILOGUE
 
 printWord:
     PROLOGUE
-    LDR R6, =randomWordBase
-    LDR R6, [R6]
-    LDR R7, =randomWordSize
-    LDR R7, [R7]
-    MOV R8, #0  // = current offset
+    LDR R4, =randomWordBase
+    LDR R4, [R4]
+    LDR R5, =randomWordSize
+    LDR R5, [R5]
+    MOV R6, #0  // = current offset
 
     printWord_loopStart:
-        CMP R8, R7
-        BGT printWord_loopEnd
+        CMP R6, R5
+        BGE printWord_loopEnd
 
-        LDRB R0, [R6, R8]
+        // Check if the letter has been guessed; if it was, #1 is returned
+        // so we know to load the character.
+        LDRB R0, [R4, R6]
         BL alreadyGuessed
-
-        // If the character is in the word, this will branch to isGuessedChar
-        // which will print the character.
         CMP R0, #1
 
         // Prepare the character to be printed.
         LDR R0, =guessedCharStr
-        LDREQB R1, [R6, R8]     // If the user guessed, load the relevant char.
+        LDREQB R1, [R4, R6]     // If the user guessed, load the relevant char.
         MOVNE R1, #0x5F         // Otherwise, load an underscore.
         STRB R1, [R0]
 
@@ -425,7 +423,7 @@ printWord:
         MOV R2, #2
         SYSCALL $sys_write
 
-        ADD R8, R8, #1
+        ADD R6, R6, #1
         B printWord_loopStart
 
     printWord_loopEnd:
@@ -433,13 +431,12 @@ printWord:
 
 printMisses:
     PROLOGUE
-
     MOV R4, #0  // = counter
     LDR R5, =guessedLetters
     
     printMisses_loopStart:
         CMP R4, #26
-        BGT printMisses_loopEnd
+        BGE printMisses_loopEnd
 
         LDRB R0, [R5, R4]
         BL charInWord
@@ -457,7 +454,7 @@ printMisses:
 
         printMisses_continue:
             ADD R4, R4, #1
-
+            B printMisses_loopStart
     printMisses_loopEnd:
 
     EPILOGUE
@@ -509,9 +506,6 @@ gallows_str:
 .ascii "    ────────┘\n"
 .asciz "\n"
 gallows_str_size= .-gallows_str
-
-.align 4
-underlay_blank:         .ascii "_ "
 
 .align 4
 underlay_1:
