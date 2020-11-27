@@ -341,7 +341,7 @@ alreadyGuessed:
         // If the current offset is 26 or higher (recall that the array is zero-indexed)
         // we have passed the array and not found the character.
         CMP R5, #26
-        BGT alreadyGuessed_return
+        BGE alreadyGuessed_return
 
         LDRB R7, [R6, R5] // R7 = character at: [guessedLetters base address + offset]
         
@@ -408,32 +408,25 @@ printWord:
         // If the character is in the word, this will branch to isGuessedChar
         // which will print the character.
         CMP R0, #1
-        BEQ printWord_isGuessedChar
 
-        // Otherwise print that character.
-        CMP R8, R7
-        BGE printWord_loopEnd
-        print underlay_blank, #2
-        B printWord_continue
+        // Prepare the character to be printed.
+        LDR R0, =guessedCharStr
+        LDREQB R1, [R6, R8]     // If the user guessed, load the relevant char.
+        MOVNE R1, #0x5F         // Otherwise, load an underscore.
+        STRB R1, [R0]
 
-        printWord_isGuessedChar:
-            // Write the guessed character and a space into
-            // guessedCharStr.
-            LDR R0, =guessedCharStr
-            LDRB R1, [R6, R8]
-            STRB R1, [R0]
-            MOV R1, #0x20
-            STRB R1, [R0, #1]
-
-            MOV R0, $stdout
-            LDR R1, =guessedCharStr
-            MOV R2, #2
-            SYSCALL $sys_write
-            B printWord_continue
+        // Add a space after.
+        MOV R1, #0x20
+        STRB R1, [R0, #1]
         
-        printWord_continue:
-            ADD R8, R8, #1
-            B printWord_loopStart
+        // Now print it to standard output.
+        MOV R0, $stdout
+        LDR R1, =guessedCharStr
+        MOV R2, #2
+        SYSCALL $sys_write
+
+        ADD R8, R8, #1
+        B printWord_loopStart
 
     printWord_loopEnd:
     EPILOGUE
@@ -467,6 +460,40 @@ printMisses:
 
     printMisses_loopEnd:
 
+    EPILOGUE
+
+/**
+ * Checks if the entire word has been guessed (i.e. whether or not the
+ * game has been won.)
+ * 0 = false, 1 = true
+ */
+entireWordGuessed:
+    PROLOGUE
+    MOV R4, #0  // counter = 0
+    LDR R5, =randomWordBase
+    LDR R5, [R5]
+    LDR R6, =randomWordSize
+    LDR R6, [R6]
+
+    entireWordGuessed_loopStart:
+        CMP R4, R6
+        BGE entireWordGuessed_loopEnd
+
+        LDRB R0, [R5, R4]
+        BL alreadyGuessed   // returns 1 if letter guessed
+        
+        // If the letter was not guessed, we can conclude that
+        // the entire word wasn't guessed, and therefore we exit
+        // the loop early.
+        CMP R0, #0
+        BEQ entireWordGuessed_loopEndNoRet
+
+        ADD R4, R4, #1
+        B entireWordGuessed_loopStart
+    entireWordGuessed_loopEnd:
+    MOV R0, #1
+
+    entireWordGuessed_loopEndNoRet:
     EPILOGUE
 
 .data

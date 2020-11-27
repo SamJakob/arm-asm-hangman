@@ -176,6 +176,11 @@ main:
                     CMP R5, #0
                     BEQ game_end_loss
 
+                    // Check if the player has won the game.
+                    BL entireWordGuessed
+                    CMP R0, #1
+                    BEQ game_end_success
+
                 // Read the user's next guess.
                 print           prompt_str, prompt_str_size
                 BL readGuess
@@ -212,9 +217,13 @@ main:
                     print ansi_CLEARLN, ansi_CLEARLN_size
                     print ansi_RESTORE, ansi_RESTORE_size
 
+                    // Add the guessed letter to guessedLetters.
                     MOV R0, R7
                     BL addGuess
 
+                    // Now check if the character was in the word.
+                    // If not, subtract one from the user's available moves,
+                    // (stored in R5).
                     MOV R0, R7
                     BL charInWord
                     CMP R0, #0
@@ -231,6 +240,7 @@ main:
                 BNE game_end_success
 
                 game_end_loss:
+                    // Print the randomly selected word.
                     print word_reveal_str, word_reveal_str_size
                     MOV R0, #1
                     LDR R1, =randomWordBase
@@ -239,12 +249,13 @@ main:
                     LDR R2, [R2]
                     SYSCALL $sys_write
 
+                    // Now print the game over (loss) message.
                     print newlines, #2
-
                     print loss_str, loss_str_size
                     B play_again_prompt
 
                 game_end_success:
+                    // Print the randomly selected word.
                     print word_reveal_str, word_reveal_str_size
                     MOV R0, #1
                     LDR R1, =randomWordBase
@@ -253,8 +264,8 @@ main:
                     LDR R2, [R2]
                     SYSCALL $sys_write
 
+                    // Now print the game over (winning) message.
                     print newlines, #2
-
                     print win_str, win_str_size
                     B play_again_prompt
                 
