@@ -7,6 +7,13 @@
 .ifndef libSJM_func_inc
 .set libSJM_func_inc, 1
 
+/*
+    Macros to execute function prologue and epilogue based on the
+    ARM calling convention.
+
+    https://developer.arm.com/documentation/dui0040/d/using-the-procedure-call-standards/using-the-arm-procedure-call-standard/apcs-register-names-and-usage?lang=en
+ */
+
 .macro PROLOGUE
     PUSH {R4-R11, LR}   // Push the register state from before the function call.
 

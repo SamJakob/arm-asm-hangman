@@ -420,7 +420,7 @@ ansi_RESTORE_size=              .-ansi_RESTORE
 ansi_CLEARLN:                   .string "\033[K"  // ANSI command to clear current line.
 ansi_CLEARLN_size=              .-ansi_CLEARLN
 
-ansi_CLEAR:                     .string "\033[2J"  // ANSI command to clear current line.
+ansi_CLEAR:                     .string "\033[2J"  // ANSI command to clear current screen.
 ansi_CLEAR_size=                .-ansi_CLEAR
 
 // Errors
